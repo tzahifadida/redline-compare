@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redline Text Compare</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23121933'/%3E%3Cstop offset='100%25' stop-color='%230b1020'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23bg)'/%3E%3Cpath d='M16 22h18' stroke='%23f87171' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M30 32h18' stroke='%23fbbf24' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M16 42h30' stroke='%2334d399' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='44' cy='22' r='4' fill='%2379a8ff'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #182142;
+      --panel-3: #0d1430;
+      --text: #e8ecf7;
+      --muted: #9aa6c5;
+      --border: #2b3768;
+      --border-soft: rgba(125, 147, 214, 0.16);
+      --accent: #79a8ff;
+      --accent-strong: #c8dcff;
+      --insert-bg: rgba(74, 222, 128, 0.34);
+      --insert-border: rgba(74, 222, 128, 0.62);
+      --insert-text: #dcfce7;
+      --replace-bg: rgba(251, 191, 36, 0.18);
+      --replace-border: rgba(251, 191, 36, 0.34);
+      --replace-text: #fde68a;
+      --delete-bg: rgba(248, 113, 113, 0.16);
+      --delete-border: rgba(248, 113, 113, 0.3);
+      --delete-text: #ffb4b4;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      --shadow-strong: 0 18px 40px rgba(3, 7, 18, 0.42);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(121, 168, 255, 0.15), transparent 38%),
+        linear-gradient(180deg, #0b1020 0%, #0e1530 100%);
+      color: var(--text);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 20px;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .panel {
+      background: rgba(18, 25, 51, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-strong);
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+
+    .panel.compact {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header-actions {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .panel-title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .panel-subtitle {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel-body { padding: 16px; }
+
+    .sidebar {
+      display: grid;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .sidebar-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 14px;
+      font: 15px/1.65 Georgia, "Times New Roman", serif;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(121, 168, 255, 0.16);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: #1b2752;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    button:hover { transform: translateY(-1px); border-color: #4160c5; }
+    button.primary { background: linear-gradient(180deg, #2a4db2, #223f90); }
+    button.ghost { background: transparent; }
+    button.accept { border-color: var(--insert-border); color: var(--insert-text); }
+    button.reject { border-color: rgba(248, 113, 113, 0.45); color: var(--delete-text); }
+    button.small { padding: 6px 10px; border-radius: 10px; font-size: 12px; }
+    button.compact { padding: 7px 10px; border-radius: 10px; font-size: 12px; }
+    button.toggle-on {
+      background: linear-gradient(180deg, #2a4db2, #223f90);
+      border-color: #4160c5;
+      color: var(--accent-strong);
+    }
+    button.demo-button {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      padding-inline: 12px;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .options {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .options label { display: flex; align-items: center; gap: 8px; }
+
+    .output-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .summary-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .pill {
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .document {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+        #101733;
+      padding: 0;
+      overflow: hidden;
+      line-height: 2.2;
+      font-size: 18px;
+      flex: 1;
+      min-height: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      position: relative;
+    }
+
+    .editor-shell {
+      position: absolute;
+      inset: 0;
+    }
+
+    .editor-shell.diff-shell {
+      --gutter-width: 240px;
+    }
+
+    /* Overlay and textarea share identical geometry so text lines up pixel-perfectly */
+    .document-overlay,
+    .document-textarea {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      padding: 24px 22px;
+      overflow: auto;
+      font: inherit;
+      line-height: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+      tab-size: 4;
+      border: 0;
+      outline: none;
+      margin: 0;
+      box-sizing: border-box;
+    }
+
+    /* Overlay: purely visual, never receives input */
+    .document-overlay {
+      pointer-events: none;
+      /* Text is invisible — only backgrounds/underlines from .ins/.del show */
+      color: transparent;
+      background: transparent;
+      resize: none;
+      z-index: 3;
+    }
+
+    .editor-shell.diff-shell .document-overlay,
+    .editor-shell.diff-shell .document-textarea {
+      padding-right: calc(var(--gutter-width) + 28px);
+    }
+
+    /* Make inline chip text invisible too — only the background/border matters */
+    .document-overlay .ins,
+    .document-overlay .change-chip {
+      color: transparent;
+    }
+
+    /* Textarea: sits behind overlay, receives all input */
+    .document-textarea {
+      resize: none;
+      background: transparent;
+      color: var(--text);
+      caret-color: var(--text);
+      z-index: 2;
+      /* Must be transparent so overlay backgrounds show through */
+      color: var(--text);
+    }
+
+    /* In diff mode the textarea provides the readable text; the overlay only adds
+       highlight backgrounds/badges on top of matching positions. */
+    .document-textarea.diff-mode {
+      color: var(--text);
+      caret-color: var(--text);
+    }
+
+    .document-textarea.final-mode {
+      color: var(--text);
+    }
+
+    .ins {
+      background: var(--insert-bg);
+      color: var(--insert-text);
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+      border-radius: 2px;
+      box-shadow: inset 0 -1px 0 var(--insert-border);
+    }
+
+    .rep {
+      background: var(--replace-bg);
+      color: var(--replace-text);
+      border-radius: 2px;
+      box-shadow: inset 0 -1px 0 var(--replace-border);
+    }
+
+    .del {
+      background: var(--delete-bg);
+      color: var(--delete-text);
+      text-decoration: line-through;
+      border: 1px solid var(--delete-border);
+      border-radius: 6px;
+      padding: 1px 3px;
+    }
+
+    .change-chip {
+      display: inline;
+      border-radius: 8px;
+      transition: background 0.12s ease, box-shadow 0.12s ease, outline-color 0.12s ease;
+      cursor: pointer;
+    }
+
+    .change-chip.active {
+      background: rgba(121, 168, 255, 0.08);
+      outline: 1px dashed rgba(121, 168, 255, 0.72);
+      box-shadow: 0 0 0 4px rgba(121, 168, 255, 0.12);
+    }
+
+    .change-chip.accepted,
+    .change-chip.rejected {
+      outline: none;
+      box-shadow: none;
+    }
+
+    .replacement-pair {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      margin: 0 2px;
+      padding: 1px 2px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .replacement-arrow {
+      font: 12px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .document-gutter {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: var(--gutter-width);
+      height: 100%;
+      padding: 24px 14px 24px 0;
+      overflow: auto;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .gutter-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .deletion-anchor {
+      position: relative;
+      display: inline-block;
+      width: 0;
+      height: 0;
+      margin: 0;
+      vertical-align: baseline;
+      overflow: visible;
+      pointer-events: auto;
+      z-index: 5;
+    }
+
+    .deletion-anchor::before {
+      content: attr(data-marker);
+      position: absolute;
+      left: 0;
+      top: -1.3em;
+      transform: translate(-50%, -100%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.15em;
+      height: 1.15em;
+      padding: 0 0.18em;
+      border-radius: 999px;
+      background: rgba(86, 22, 28, 0.96);
+      color: var(--delete-text);
+      font: 700 11px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 6;
+    }
+
+    .replacement-anchor {
+      position: relative;
+      display: inline-block;
+      width: 0;
+      height: 0;
+      margin: 0;
+      vertical-align: baseline;
+      overflow: visible;
+      pointer-events: auto;
+      z-index: 5;
+    }
+
+    .replacement-anchor::before {
+      content: attr(data-marker);
+      position: absolute;
+      left: 0;
+      top: -1.3em;
+      transform: translate(-50%, -100%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.15em;
+      height: 1.15em;
+      padding: 0 0.18em;
+      border-radius: 999px;
+      background: rgba(92, 53, 7, 0.96);
+      color: var(--replace-text);
+      font: 700 11px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 6;
+    }
+
+    .marker-tooltip {
+      position: fixed;
+      min-width: 140px;
+      width: 220px;
+      max-width: min(280px, calc(100vw - 48px));
+      padding: 6px 8px;
+      border-radius: 8px;
+      font: 14px/1.4 "IBM Plex Sans", "Segoe UI", sans-serif;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      text-decoration: none;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+      z-index: 60;
+    }
+
+    .marker-tooltip.visible {
+      opacity: 1;
+    }
+
+    .marker-tooltip.delete-tooltip {
+      border: 1px solid var(--delete-border);
+      background: rgba(20, 10, 14, 0.96);
+      color: var(--delete-text);
+    }
+
+    .marker-tooltip.replace-tooltip {
+      border: 1px solid var(--replace-border);
+      background: rgba(26, 20, 8, 0.96);
+      color: var(--replace-text);
+    }
+
+    .deletion-badge {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      padding: 4px 8px;
+      background: var(--delete-bg);
+      color: var(--delete-text);
+      font-size: 14px;
+      line-height: 1.4;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      border-radius: 8px;
+      border: 1px solid var(--delete-border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .replacement-badge {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      padding: 4px 8px;
+      background: var(--replace-bg);
+      color: var(--replace-text);
+      font-size: 14px;
+      line-height: 1.4;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      border-radius: 8px;
+      border: 1px solid var(--replace-border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .deletion-anchor.active,
+    .replacement-anchor.active {
+      outline: 1px dashed rgba(121, 168, 255, 0.72);
+      box-shadow: 0 0 0 4px rgba(121, 168, 255, 0.12);
+    }
+
+    .deletion-badge.active,
+    .replacement-badge.active {
+      border-color: rgba(121, 168, 255, 0.9);
+      box-shadow:
+        inset 4px 0 0 rgba(121, 168, 255, 0.95),
+        0 0 0 2px rgba(121, 168, 255, 0.24),
+        0 10px 22px rgba(7, 12, 28, 0.28);
+      transform: translateX(-2px);
+      background:
+        linear-gradient(90deg, rgba(121, 168, 255, 0.14), rgba(121, 168, 255, 0.03)),
+        var(--delete-bg);
+    }
+
+    .replacement-badge.active {
+      background:
+        linear-gradient(90deg, rgba(121, 168, 255, 0.14), rgba(121, 168, 255, 0.03)),
+        var(--replace-bg);
+    }
+
+    .deletion-anchor.active::before,
+    .replacement-anchor.active::before {
+      outline: 1px dashed rgba(121, 168, 255, 0.72);
+      box-shadow: 0 0 0 4px rgba(121, 168, 255, 0.12);
+    }
+
+    .deletion-badge .del-wording {
+      display: inline;
+      color: var(--delete-text);
+      text-decoration: line-through;
+      text-decoration-thickness: 1.6px;
+      text-decoration-color: rgba(255, 180, 180, 0.95);
+      background: var(--delete-bg);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .replacement-badge .rep-wording {
+      display: inline;
+      color: var(--replace-text);
+      background: var(--replace-bg);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .cue-content {
+      min-width: 0;
+    }
+
+    .cue-revert {
+      align-self: start;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .review-dock {
+      margin-top: 8px;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(9, 13, 28, 0.95);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow-strong);
+      padding: 8px 10px;
+    }
+
+    .review-dock.empty-state {
+      opacity: 0.78;
+    }
+
+    .review-dock-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .review-label {
+      color: var(--accent-strong);
+      font: 700 10px/1.2 "IBM Plex Sans", "Segoe UI", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .review-title {
+      font: 700 12px/1.2 "IBM Plex Sans", "Segoe UI", sans-serif;
+      margin: 0;
+    }
+
+    .review-detail {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .review-nav {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: auto;
+    }
+
+    .review-nav button:disabled,
+    .review-actions button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .review-toolbar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-soft);
+    }
+
+    .review-toolbar-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .shortcut-tip {
+      position: fixed;
+      right: 22px;
+      bottom: 20px;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(9, 13, 28, 0.92);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      z-index: 35;
+      pointer-events: none;
+    }
+
+    .shortcut-tip strong {
+      color: var(--accent-strong);
+      font-weight: 700;
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
+    .muted { color: var(--muted); }
+
+    .empty {
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    .main-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .preview-shell {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .preview-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .view-switch {
+      display: inline-flex;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .sessions-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.46);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease;
+      z-index: 40;
+    }
+
+    .sessions-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sessions-drawer {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      width: min(360px, calc(100vw - 36px));
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(9, 13, 28, 0.98);
+      box-shadow: var(--shadow-strong);
+      transform: translateY(-8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+      z-index: 50;
+    }
+
+    .sessions-drawer.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .sessions-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .session-item {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+    }
+
+    .session-item-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+    .session-item-meta {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .panel-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 1180px) {
+      body {
+        overflow: auto;
+      }
+      .app {
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        min-height: unset;
+      }
+      .sidebar-scroll {
+        overflow: visible;
+      }
+      .output-wrap { min-height: unset; }
+      textarea { min-height: 180px; }
+    }
+
+    @media (max-width: 720px) {
+      .review-dock-top {
+        flex-direction: column;
+      }
+      .preview-topbar {
+        align-items: flex-start;
+      }
+      .review-nav {
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-scroll">
+        <section class="panel compact">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Source texts</div>
+              <div class="panel-subtitle">Compact inputs, preview-first workflow</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="panel-title" style="font-size: 13px;">Original</div>
+            <textarea id="oldText" placeholder="Paste the original text here..."></textarea>
+            <div class="panel-title" style="font-size: 13px; margin-top: 14px;">Revised</div>
+            <textarea id="newText" placeholder="Paste the revised text here..."></textarea>
+            <div class="toolbar">
+              <button id="compareBtn" class="primary compact">Compare</button>
+              <button id="copyResult" class="ghost compact">Copy result</button>
+              <button id="loadDemo" class="ghost compact demo-button">Load Demo</button>
+              <button id="clearAll" class="ghost compact">Clear</button>
+            </div>
+            <div class="options">
+              <label><input type="checkbox" id="autoCompare" checked /> auto compare</label>
+              <label><input type="checkbox" id="showDeleted" checked /> show deletions</label>
+            </div>
+            <div class="panel-note">The inputs stay small so the review surface can own the screen.</div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <section class="panel main-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Document Editor</div>
+          <div class="panel-subtitle">Edit the document directly, with diff highlights when needed</div>
+        </div>
+      </div>
+      <div class="panel-body output-wrap">
+        <div class="preview-shell">
+          <div class="preview-topbar">
+            <div class="summary-bar" id="summaryBar"></div>
+            <div class="view-switch" aria-label="Preview mode">
+              <button id="diffViewBtn" class="compact toggle-on" type="button">Diff view</button>
+              <button id="finalViewBtn" class="ghost compact" type="button">Final view</button>
+            </div>
+          </div>
+          <div class="legend">
+            <span><i class="swatch" style="background: var(--insert-bg);"></i> insertion</span>
+            <span><i class="swatch" style="background: var(--delete-bg);"></i> deletion</span>
+            <span class="muted" id="legendHint">Diff view shows highlights, but you can still edit anywhere in the document.</span>
+          </div>
+          <div class="document" id="documentPreview"></div>
+          <div class="review-dock" id="reviewDock"></div>
+          <div class="review-toolbar">
+            <div class="review-toolbar-group">
+              <button id="undoBtn" class="ghost compact" type="button">Undo</button>
+              <button id="redoBtn" class="ghost compact" type="button">Redo</button>
+              <button id="copyApproved" class="ghost compact">Copy editor text</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="shortcut-tip" id="shortcutTip">
+    <strong>Undo / Redo</strong><br />
+    <span id="shortcutTipText">Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z</span>
+  </div>
+  <div id="markerTooltip" class="marker-tooltip" aria-hidden="true"></div>
+
+  <script>
+    const oldTextEl = document.getElementById('oldText');
+    const newTextEl = document.getElementById('newText');
+    const documentPreview = document.getElementById('documentPreview');
+    const summaryBar = document.getElementById('summaryBar');
+    const autoCompareEl = document.getElementById('autoCompare');
+    const showDeletedEl = document.getElementById('showDeleted');
+    const reviewDock = document.getElementById('reviewDock');
+    const legendHint = document.getElementById('legendHint');
+    const diffViewBtn = document.getElementById('diffViewBtn');
+    const finalViewBtn = document.getElementById('finalViewBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const shortcutTipText = document.getElementById('shortcutTipText');
+    const markerTooltip = document.getElementById('markerTooltip');
+
+    let currentChanges = [];
+    let currentTokens = [];
+    let activeChangeId = null;
+    let previewMode = 'diff';
+    let historyStack = [];
+    let historyIndex = -1;
+    let suppressHistory = false;
+    let finalTextDraft = null;
+    const SESSION_KEY = 'redline-text-compare-session';
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function tokenize(text) {
+      if (!text) return [];
+      return text.match(/\r\n|\n|\s+|[^\s\w]+|[\w]+/g) || [];
+    }
+
+    function isWhitespaceOnly(text) {
+      return /^[\r\n\s]+$/.test(text);
+    }
+
+    function lcsDiff(a, b) {
+      const n = a.length;
+      const m = b.length;
+      const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+
+      const ops = [];
+      let i = 0, j = 0;
+      while (i < n && j < m) {
+        if (a[i] === b[j]) {
+          ops.push({ type: 'equal', tokens: [a[i]] });
+          i++; j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+          ops.push({ type: 'delete', tokens: [a[i]] });
+          i++;
+        } else {
+          ops.push({ type: 'insert', tokens: [b[j]] });
+          j++;
+        }
+      }
+      while (i < n) ops.push({ type: 'delete', tokens: [a[i++]] });
+      while (j < m) ops.push({ type: 'insert', tokens: [b[j++]] });
+
+      const merged = [];
+      for (const op of ops) {
+        const prev = merged[merged.length - 1];
+        if (prev && prev.type === op.type) prev.tokens.push(...op.tokens);
+        else merged.push({ type: op.type, tokens: [...op.tokens] });
+      }
+      return merged;
+    }
+
+    function buildChanges(oldText, newText) {
+      const oldTokens = tokenize(oldText);
+      const newTokens = tokenize(newText);
+      const ops = lcsDiff(oldTokens, newTokens);
+      const result = [];
+      const changes = [];
+      let id = 1;
+
+      for (let i = 0; i < ops.length; i++) {
+        const op = ops[i];
+        if (op.type === 'equal') {
+          result.push({ type: 'equal', text: op.tokens.join('') });
+          continue;
+        }
+
+        let oldSeg = '';
+        let newSeg = '';
+        let j = i;
+
+        while (j < ops.length) {
+          const currentOp = ops[j];
+          const segmentText = currentOp.tokens.join('');
+
+          if (currentOp.type === 'equal') {
+            const nextOp = ops[j + 1];
+            if (isWhitespaceOnly(segmentText) && nextOp && nextOp.type !== 'equal') {
+              oldSeg += segmentText;
+              newSeg += segmentText;
+              j += 1;
+              continue;
+            }
+            break;
+          }
+
+          if (currentOp.type === 'delete') oldSeg += segmentText;
+          if (currentOp.type === 'insert') newSeg += segmentText;
+          j += 1;
+        }
+
+        let change;
+        if (oldSeg && newSeg) {
+          change = { id: id++, type: 'replace', oldText: oldSeg, newText: newSeg, originalNewText: newSeg, decision: 'pending' };
+        } else if (newSeg) {
+          change = { id: id++, type: 'insert', oldText: '', newText: newSeg, originalNewText: newSeg, decision: 'pending' };
+        } else {
+          change = { id: id++, type: 'delete', oldText: oldSeg, newText: '', originalNewText: '', decision: 'pending' };
+        }
+
+        changes.push(change);
+        result.push({ type: 'change', changeId: change.id });
+        i = j - 1;
+      }
+
+      return { tokens: result, changes };
+    }
+
+    function describeChange(change) {
+      if (change.type === 'replace') return 'Replace';
+      if (change.type === 'insert') return 'Insert';
+      return 'Delete';
+    }
+
+    function getChangeStatus(change) {
+      if (change.decision === 'accepted') return 'Approved';
+      if (change.decision === 'rejected') return 'Rejected';
+      return 'Pending';
+    }
+
+    function cloneState() {
+      return JSON.parse(JSON.stringify({
+        oldText: oldTextEl.value,
+        newText: newTextEl.value,
+        currentTokens,
+        currentChanges,
+        activeChangeId,
+        previewMode,
+        finalTextDraft
+      }));
+    }
+
+    function saveSessionState() {
+      try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+          current: cloneState(),
+          historyStack,
+          historyIndex
+        }));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function loadSessionState() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    }
+
+    function statesEqual(a, b) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function pushHistory() {
+      if (suppressHistory) return;
+      const snapshot = cloneState();
+      const current = historyStack[historyIndex];
+      if (current && statesEqual(current, snapshot)) return;
+      historyStack = historyStack.slice(0, historyIndex + 1);
+      historyStack.push(snapshot);
+      historyIndex = historyStack.length - 1;
+      saveSessionState();
+    }
+
+    function restoreHistoryState(snapshot) {
+      if (!snapshot) return;
+      suppressHistory = true;
+      oldTextEl.value = snapshot.oldText;
+      newTextEl.value = snapshot.newText;
+      currentTokens = snapshot.currentTokens;
+      currentChanges = snapshot.currentChanges;
+      activeChangeId = snapshot.activeChangeId;
+      previewMode = snapshot.previewMode;
+      finalTextDraft = snapshot.finalTextDraft ?? null;
+      renderAll();
+      saveSessionState();
+      suppressHistory = false;
+    }
+
+    function undoHistory() {
+      if (historyIndex <= 0) return;
+      historyIndex -= 1;
+      restoreHistoryState(historyStack[historyIndex]);
+    }
+
+    function redoHistory() {
+      if (historyIndex >= historyStack.length - 1) return;
+      historyIndex += 1;
+      restoreHistoryState(historyStack[historyIndex]);
+    }
+
+    function buildFinalTextFromChanges() {
+      let out = '';
+      for (const part of currentTokens) {
+        if (part.type === 'equal') {
+          out += part.text;
+          continue;
+        }
+        const change = currentChanges.find(c => c.id === part.changeId);
+        if (!change) continue;
+        const decision = change.decision;
+        if (decision === 'accepted') {
+          if (change.type === 'replace' || change.type === 'insert' || (change.type === 'delete' && change.newText)) out += change.newText;
+        } else if (decision === 'rejected') {
+          if (change.type === 'replace' || change.type === 'delete') out += change.oldText;
+        } else {
+          if (change.type === 'replace' || change.type === 'delete') out += change.oldText;
+        }
+      }
+      return out;
+    }
+
+    function buildEditorTextFromChanges() {
+      let out = '';
+      for (const part of currentTokens) {
+        if (part.type === 'equal') {
+          out += part.text;
+          continue;
+        }
+        const change = currentChanges.find(c => c.id === part.changeId);
+        if (!change) continue;
+        if (change.type === 'delete') {
+          if (change.decision === 'rejected') out += change.oldText;
+          continue;
+        }
+        if (change.decision === 'rejected') {
+          out += change.oldText;
+        } else {
+          out += change.newText;
+        }
+      }
+      return out;
+    }
+
+    function getFinalText() {
+      return finalTextDraft ?? newTextEl.value ?? buildFinalTextFromChanges();
+    }
+
+    function revertChangeToOriginal(changeId) {
+      const change = currentChanges.find(c => c.id === changeId);
+      if (!change) return;
+      change.decision = 'rejected';
+      activeChangeId = changeId;
+      finalTextDraft = buildEditorTextFromChanges();
+      newTextEl.value = finalTextDraft;
+      renderAll();
+      pushHistory();
+    }
+
+    function rebuildDiffFromDocumentText() {
+      const finalText = getFinalText();
+      newTextEl.value = finalText;
+      const { tokens, changes } = buildChanges(oldTextEl.value, finalText);
+      currentTokens = tokens;
+      currentChanges = changes;
+      if (!changes.find(c => c.id === activeChangeId)) {
+        activeChangeId = changes[0]?.id ?? null;
+      }
+    }
+
+    function syncDiffToFinalDraft() {
+      rebuildDiffFromDocumentText();
+      currentChanges.forEach((change) => {
+        change.decision = 'accepted';
+      });
+    }
+
+    function getPlainTextFromContentEditable(el) {
+      // Walk DOM extracting plain text. Skip deletion-badge spans (UI labels only).
+      // deletion-anchor chips themselves contribute no text (the deleted word is gone).
+      let text = '';
+      function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          text += node.textContent;
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        // Skip all chip spans — they are UI only, not real document text
+        if (node.dataset.chip) return;
+        for (const child of node.childNodes) walk(child);
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'div' || tag === 'p') text += '\n';
+        if (tag === 'br') text += '\n';
+      }
+      walk(el);
+      return text.replace(/\n$/, '');
+    }
+
+    function getCaretCharOffset(el) {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const range = sel.getRangeAt(0);
+      if (!el.contains(range.startContainer)) return null;
+
+      // Walk the live DOM, counting real text chars until we hit the caret node+offset
+      let count = 0;
+      let found = false;
+      const targetNode = range.startContainer;
+      const targetOffset = range.startOffset;
+
+      function walk(node) {
+        if (found) return;
+        if (node === targetNode && node.nodeType === Node.TEXT_NODE) {
+          count += targetOffset;
+          found = true;
+          return;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+          count += node.textContent.length;
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        // Skip all chip spans — they contribute no real text
+        if (node.dataset.chip) return;
+        for (const child of node.childNodes) {
+          if (found) return;
+          walk(child);
+        }
+      }
+      walk(el);
+      return found ? count : null;
+    }
+
+    function setCaretCharOffset(el, targetOffset) {
+      const sel = window.getSelection();
+      if (!sel) return;
+      let remaining = targetOffset;
+      let found = false;
+      function walk(node) {
+        if (found) return;
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (remaining <= node.textContent.length) {
+            const range = document.createRange();
+            range.setStart(node, remaining);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            found = true;
+          } else {
+            remaining -= node.textContent.length;
+          }
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        // Skip all chip spans
+        if (node.dataset.chip) return;
+        for (const child of node.childNodes) walk(child);
+      }
+      walk(el);
+      // If offset is past the end, place caret at end
+      if (!found) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }
+
+    function attachDocumentEditor() {
+      const editor = document.getElementById('documentEditor');
+      if (!editor) return;
+
+      editor.addEventListener('focus', pushHistory);
+
+      // Both diff-mode and final-mode editors are plain textareas now.
+      // The diff overlay is updated separately and never touches the textarea.
+      let rafPending = false;
+      const debouncedOverlayRender = debounce(() => {
+        // Re-render overlay and summary after typing pause (doesn't touch textarea)
+        const overlay = document.getElementById('documentOverlay');
+        if (!overlay) return; // final mode has no overlay
+        const sel0 = editor.selectionStart;
+        const sel1 = editor.selectionEnd;
+        const st = editor.scrollTop;
+        renderPreview();
+        renderSummary();
+        // Restore selection after renderPreview may have reset textarea.value
+        try { editor.setSelectionRange(sel0, sel1); } catch(e) {}
+        editor.scrollTop = st;
+      }, 500);
+
+      editor.addEventListener('input', () => {
+        finalTextDraft = editor.value.replace(/\r/g, '');
+        if (previewMode === 'final') {
+          syncDiffToFinalDraft();
+        } else {
+          rebuildDiffFromDocumentText();
+        }
+        pushHistory();
+        // Update overlay asynchronously; don't touch textarea during this rAF
+        if (!rafPending) {
+          rafPending = true;
+          requestAnimationFrame(() => {
+            rafPending = false;
+            renderSummary();
+            renderReviewDock();
+            debouncedOverlayRender();
+          });
+        }
+      });
+    }
+
+    function hideMarkerTooltip() {
+      markerTooltip.className = 'marker-tooltip';
+      markerTooltip.textContent = '';
+      markerTooltip.setAttribute('aria-hidden', 'true');
+    }
+
+    function showMarkerTooltip(target) {
+      const tooltipText = target.getAttribute('data-tooltip');
+      if (!tooltipText) {
+        hideMarkerTooltip();
+        return;
+      }
+
+      const isReplacement = target.classList.contains('replacement-anchor');
+      markerTooltip.textContent = tooltipText;
+      markerTooltip.className = `marker-tooltip visible ${isReplacement ? 'replace-tooltip' : 'delete-tooltip'}`;
+      markerTooltip.setAttribute('aria-hidden', 'false');
+
+      const rect = target.getBoundingClientRect();
+      const tooltipWidth = markerTooltip.offsetWidth || 220;
+      const left = Math.min(
+        Math.max(12, rect.left),
+        window.innerWidth - tooltipWidth - 12
+      );
+      const top = Math.max(12, rect.top - markerTooltip.offsetHeight - 18);
+      markerTooltip.style.left = `${left}px`;
+      markerTooltip.style.top = `${top}px`;
+    }
+
+    function focusActiveChange(scrollBehavior = 'smooth') {
+      const textarea = document.getElementById('documentEditor');
+      const overlay = document.getElementById('documentOverlay');
+      const gutter = document.getElementById('documentGutter');
+      if (!textarea || !overlay) return;
+
+      const activeOverlayEl = overlay.querySelector(`[data-change-chip="${activeChangeId}"]`);
+      const activeGutterEl = documentPreview.querySelector(`.document-gutter [data-change-chip="${activeChangeId}"]`);
+      if (!activeOverlayEl && !activeGutterEl) return;
+
+      if (activeOverlayEl) {
+        const targetTop = activeOverlayEl.offsetTop;
+        const targetHeight = Math.max(activeOverlayEl.offsetHeight || 0, 28);
+        const nextScrollTop = Math.max(0, targetTop - (textarea.clientHeight / 2) + (targetHeight / 2));
+
+        textarea.scrollTo({ top: nextScrollTop, behavior: scrollBehavior });
+        overlay.scrollTop = nextScrollTop;
+      }
+
+      if (gutter && activeGutterEl) {
+        activeGutterEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: scrollBehavior });
+      }
+    }
+
+    function navigateChange(direction) {
+      const index = currentChanges.findIndex(c => c.id === activeChangeId);
+      if (index === -1) return;
+      const nextIndex = direction === 'prev' ? index - 1 : index + 1;
+      const nextChange = currentChanges[nextIndex];
+      if (!nextChange) return;
+      hideMarkerTooltip();
+      activeChangeId = nextChange.id;
+      renderAll();
+      focusActiveChange();
+    }
+
+    function renderPreview() {
+      if (previewMode === 'final') {
+        const finalText = getFinalText();
+        if (!finalText) {
+          documentPreview.innerHTML = '<div class="empty">Paste two texts and click <b>Compare</b> to generate the approved text view.</div>';
+        } else {
+          documentPreview.innerHTML = `<div class="editor-shell"><textarea id="documentEditor" class="document-textarea final-mode" spellcheck="true">${escapeHtml(finalText)}</textarea></div>`;
+        }
+        attachDocumentEditor();
+        return;
+      }
+
+      // Build overlay HTML (colour highlights only) and plain textarea value in sync.
+      // KEY RULE: overlay and textarea must contain identical text content so lines
+      // stay aligned. Deletion bubbles are NOT in the overlay — they are rendered in
+      // a separate absolutely-positioned badge layer that doesn't affect text flow.
+      const showDeleted = showDeletedEl.checked;
+      let overlayHtml = '';
+      let plainText = '';
+      const gutterItems = [];
+      let cueIndex = 0;
+
+      for (const part of currentTokens) {
+        if (part.type === 'equal') {
+          overlayHtml += escapeHtml(part.text);
+          plainText += part.text;
+          continue;
+        }
+        const change = currentChanges.find(c => c.id === part.changeId);
+        if (!change) continue;
+        const active = change.id === activeChangeId ? ' active' : '';
+        const decisionClass = change.decision !== 'pending' ? ` ${change.decision}` : '';
+
+        if (change.type === 'delete') {
+          if (change.decision === 'rejected') {
+            // Show deleted text (user kept original)
+            overlayHtml += `<span class="change-chip del${active}${decisionClass}" data-change-chip="${change.id}">${escapeHtml(change.oldText)}</span>`;
+            plainText += change.oldText;
+          } else if (change.decision === 'pending' && showDeleted) {
+            cueIndex += 1;
+            overlayHtml += `<span class="deletion-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}"></span>`;
+            gutterItems.push(
+              `<div class="deletion-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content"><strong style="margin-right:6px;">${cueIndex}.</strong><span class="del-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}">Revert</button></div>`
+            );
+          }
+          continue;
+        }
+
+        if (change.type === 'replace' && change.decision === 'pending') {
+          cueIndex += 1;
+          overlayHtml += `<span class="replacement-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}"></span>`;
+          gutterItems.push(
+            `<div class="replacement-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content"><strong style="margin-right:6px;">${cueIndex}.</strong><span class="rep-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}">Revert</button></div>`
+          );
+        }
+
+        // For insert/replace, the new text appears in both layers
+        let displayText = '';
+        if (change.decision === 'accepted') {
+          displayText = change.newText;
+        } else if (change.decision === 'rejected') {
+          displayText = change.oldText;
+        } else {
+          // pending
+          displayText = change.newText;
+        }
+
+        if (!displayText && change.decision !== 'rejected') {
+          // replace/insert with empty text — skip
+          continue;
+        }
+
+        if (change.decision === 'pending') {
+          const changeClass = change.type === 'replace' ? 'rep' : 'ins';
+          overlayHtml += `<span class="change-chip${active}" data-change-chip="${change.id}"><span class="${changeClass}">${escapeHtml(displayText)}</span></span>`;
+        } else {
+          overlayHtml += `<span class="change-chip${active}${decisionClass}" data-change-chip="${change.id}">${escapeHtml(displayText)}</span>`;
+        }
+        plainText += displayText;
+      }
+
+      const finalOverlay = overlayHtml || '<span class="muted">Paste two texts and click Compare.</span>';
+
+      // ── Render the shell ──────────────────────────────────────────────────
+      // Create shell once; update contents in-place afterwards to preserve focus.
+      let shell = document.getElementById('diffShell');
+      if (!shell) {
+        documentPreview.innerHTML = `
+          <div id="diffShell" class="editor-shell diff-shell">
+            <div id="documentOverlay" class="document-overlay"></div>
+            <textarea id="documentEditor" class="document-textarea diff-mode" spellcheck="true"></textarea>
+            <div id="documentGutter" class="document-gutter"><div id="gutterList" class="gutter-list"></div></div>
+          </div>`;
+        shell = document.getElementById('diffShell');
+        attachDocumentEditor();
+      }
+
+      const overlay = document.getElementById('documentOverlay');
+      const textarea = document.getElementById('documentEditor');
+      const gutterList = document.getElementById('gutterList');
+
+      // Update overlay HTML
+      overlay.innerHTML = finalOverlay;
+      gutterList.innerHTML = gutterItems.join('');
+
+      // Update textarea only if text changed (avoids caret reset)
+      if (textarea.value !== plainText) {
+        const sel0 = textarea.selectionStart;
+        const sel1 = textarea.selectionEnd;
+        const st = textarea.scrollTop;
+        textarea.value = plainText;
+        try { textarea.setSelectionRange(sel0, sel1); } catch(e) {}
+        textarea.scrollTop = st;
+      }
+
+      // Sync scroll overlay → textarea on scroll
+      textarea.onscroll = () => {
+        overlay.scrollTop = textarea.scrollTop;
+        overlay.scrollLeft = textarea.scrollLeft;
+        hideMarkerTooltip();
+      };
+      overlay.scrollTop = textarea.scrollTop;
+
+      // Chip click handlers
+      documentPreview.querySelectorAll('[data-change-chip]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = Number(el.getAttribute('data-change-chip'));
+          activeChangeId = id;
+          renderReviewDock();
+          renderSummary();
+          documentPreview.querySelectorAll('[data-change-chip]').forEach(c => {
+            c.classList.remove('active');
+          });
+          documentPreview.querySelectorAll(`[data-change-chip="${id}"]`).forEach(c => c.classList.add('active'));
+          hideMarkerTooltip();
+        });
+      });
+
+      documentPreview.querySelectorAll('.deletion-badge, .replacement-badge').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = Number(el.getAttribute('data-change-chip'));
+          activeChangeId = id;
+          renderReviewDock();
+          renderSummary();
+          documentPreview.querySelectorAll('[data-change-chip]').forEach(c => {
+            c.classList.remove('active');
+          });
+          documentPreview.querySelectorAll(`[data-change-chip="${id}"]`).forEach(c => c.classList.add('active'));
+        });
+        el.title = 'Click to select this change';
+      });
+
+      documentPreview.querySelectorAll('[data-revert-change]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = Number(el.getAttribute('data-revert-change'));
+          revertChangeToOriginal(id);
+        });
+        el.title = 'Revert this change to the original text';
+      });
+
+      documentPreview.querySelectorAll('[data-tooltip]').forEach(el => {
+        el.addEventListener('mouseenter', () => showMarkerTooltip(el));
+        el.addEventListener('mousemove', () => showMarkerTooltip(el));
+        el.addEventListener('mouseleave', hideMarkerTooltip);
+      });
+    }
+
+    function renderReviewDock() {
+      if (previewMode === 'final') {
+        reviewDock.className = 'review-dock empty-state';
+        reviewDock.innerHTML = `
+          <div class="review-label">Final Text</div>
+          <div class="review-title">Approved reading view</div>
+          <div class="review-detail">Switch back to Diff view to review individual edits and navigate change by change.</div>
+        `;
+        return;
+      }
+
+      const total = currentChanges.length;
+      const index = currentChanges.findIndex(c => c.id === activeChangeId);
+      const change = index >= 0 ? currentChanges[index] : null;
+
+      if (!change) {
+        reviewDock.className = 'review-dock empty-state';
+        reviewDock.innerHTML = `
+          <div class="review-dock-top">
+            <div>
+              <div class="review-label">Changes</div>
+              <div class="review-title">${total ? 'Select a change' : 'No changes yet'}</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const canPrev = index > 0;
+      const canNext = index < currentChanges.length - 1;
+      reviewDock.className = 'review-dock';
+      reviewDock.innerHTML = `
+        <div class="review-dock-top">
+          <div>
+            <div class="review-label">Changes</div>
+            <div class="review-title">${index + 1} of ${total} · ${describeChange(change)} · ${getChangeStatus(change)}</div>
+          </div>
+          <div class="review-nav">
+            <button class="small ghost" data-nav="prev" ${canPrev ? '' : 'disabled'}>Previous</button>
+            <button class="small ghost" data-nav="next" ${canNext ? '' : 'disabled'}>Next</button>
+          </div>
+        </div>
+      `;
+
+      reviewDock.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const direction = btn.getAttribute('data-nav');
+          navigateChange(direction);
+        });
+      });
+    }
+
+    function renderSummary() {
+      const total = currentChanges.length;
+      const accepted = currentChanges.filter(c => c.decision === 'accepted').length;
+      const rejected = currentChanges.filter(c => c.decision === 'rejected').length;
+      const pending = total - accepted - rejected;
+      summaryBar.innerHTML = [
+        `<span class="pill">${total} changes</span>`,
+        `<span class="pill">${accepted} approved</span>`,
+        `<span class="pill">${rejected} rejected</span>`,
+        `<span class="pill">${pending} pending</span>`
+      ].join('');
+    }
+
+    function renderAll() {
+      diffViewBtn.className = previewMode === 'diff' ? 'compact toggle-on' : 'ghost compact';
+      finalViewBtn.className = previewMode === 'final' ? 'compact toggle-on' : 'ghost compact';
+      undoBtn.disabled = historyIndex <= 0;
+      redoBtn.disabled = historyIndex >= historyStack.length - 1 || historyIndex === -1;
+      legendHint.textContent = previewMode === 'diff'
+        ? 'Click any highlighted change to review it in the dock below.'
+        : 'Final view shows the approved text with all current decisions applied.';
+      renderPreview();
+      renderReviewDock();
+      renderSummary();
+    }
+
+    function compare() {
+      const oldText = oldTextEl.value;
+      const newText = newTextEl.value;
+      const { tokens, changes } = buildChanges(oldText, newText);
+      currentTokens = tokens;
+      currentChanges = changes;
+      activeChangeId = changes[0]?.id ?? null;
+      finalTextDraft = newText;
+      renderAll();
+      pushHistory();
+    }
+
+    function debounce(fn, ms) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+      };
+    }
+
+    const debouncedCompare = debounce(() => {
+      if (autoCompareEl.checked) compare();
+    }, 250);
+
+    oldTextEl.addEventListener('input', debouncedCompare);
+    newTextEl.addEventListener('input', debouncedCompare);
+    showDeletedEl.addEventListener('change', renderAll);
+
+    document.getElementById('compareBtn').addEventListener('click', compare);
+    async function copyApprovedText() {
+      try {
+        const editor = document.getElementById('documentEditor');
+        const currentEditorText = editor ? editor.value : getFinalText();
+        await navigator.clipboard.writeText(currentEditorText);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    document.getElementById('copyResult').addEventListener('click', copyApprovedText);
+    document.getElementById('copyApproved').addEventListener('click', copyApprovedText);
+    undoBtn.addEventListener('click', undoHistory);
+    redoBtn.addEventListener('click', redoHistory);
+    diffViewBtn.addEventListener('click', () => {
+      previewMode = 'diff';
+      rebuildDiffFromDocumentText();
+      renderAll();
+      pushHistory();
+    });
+    finalViewBtn.addEventListener('click', () => {
+      previewMode = 'final';
+      finalTextDraft = getFinalText();
+      renderAll();
+      pushHistory();
+    });
+    document.getElementById('clearAll').addEventListener('click', () => {
+      oldTextEl.value = '';
+      newTextEl.value = '';
+      currentTokens = [];
+      currentChanges = [];
+      activeChangeId = null;
+      finalTextDraft = null;
+      renderAll();
+      pushHistory();
+    });
+    document.getElementById('loadDemo').addEventListener('click', () => {
+      oldTextEl.value = `Project Aurora is a neighborhood pilot program designed to help residents report small infrastructure issues and request city follow-up. The first version of the program was launched in 2022 with a simple web form, a weekly email digest, and a volunteer review team that manually routed every request.
+
+In the original process, residents could submit reports about broken lights, damaged sidewalks, graffiti, and overflowing bins. Each report was reviewed by staff on Friday afternoon, grouped into a spreadsheet, and forwarded to the relevant municipal department. The team also published a short monthly bulletin with a count of resolved tickets and a short narrative summary.
+
+The pilot produced encouraging feedback, but it also created several operational problems. Response times were inconsistent, duplicate reports were common, and urgent issues were sometimes mixed together with cosmetic requests. Some residents said the updates were too vague, while others said they never knew whether a report had been received at all.
+
+For the next phase, the city planned to keep the same overall structure and only make minor wording updates to the public guide. The guide stated that submissions would usually receive a response within ten business days and that every request would be reviewed in the order it arrived. It also noted that photos were optional and that anonymous reports were discouraged but still allowed.`;
+      newTextEl.value = `Project Aurora is a neighborhood service program designed to help residents report infrastructure issues and receive clear city follow-up. The updated version of the program launched in 2024 with a guided web form, automatic confirmations, and a small operations team that triages requests every business day.
+
+In the revised process, residents can submit reports about broken lights, damaged sidewalks, graffiti, unsafe crossings, illegal dumping, and overflowing bins. Each report is acknowledged immediately, assigned a category, and routed to the relevant municipal department through a shared queue. The team now publishes a public status dashboard with resolution counts, median response time, and short notes for high-priority incidents.
+
+The pilot produced encouraging feedback, but it also exposed several operational problems. Response times were inconsistent, duplicate reports were common, and urgent safety issues were sometimes mixed together with routine maintenance requests. Some residents said the updates were too vague, while others said they never knew whether a report had been received, reviewed, or closed.
+
+For the next phase, the city plans to keep the reporting workflow while making substantial updates to the public guide. The guide now states that submissions usually receive an initial response within three business days and that safety-related requests may be escalated ahead of routine issues. It also explains that photos are strongly recommended, anonymous reports are accepted in limited cases, and repeat reports may be merged when they describe the same problem. A short FAQ was added at the end to explain status labels, duplicate handling, and when residents should call emergency services instead of filing a standard report.`;
+      compare();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const isUndo = (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
+      const isRedo = (e.metaKey || e.ctrlKey) && ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y');
+      const isCopy = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c';
+      const isNextChange = (e.metaKey || e.ctrlKey) && e.altKey && e.key === 'ArrowDown';
+      const isPrevChange = (e.metaKey || e.ctrlKey) && e.altKey && e.key === 'ArrowUp';
+      if (isCopy) {
+        const editor = document.getElementById('documentEditor');
+        const isFocusedEditor = editor && document.activeElement === editor;
+        const hasSelection = editor && typeof editor.selectionStart === 'number' && typeof editor.selectionEnd === 'number' && editor.selectionStart !== editor.selectionEnd;
+        if (isFocusedEditor && !hasSelection) {
+          e.preventDefault();
+          navigator.clipboard.writeText(editor.value).catch((err) => console.error(err));
+        }
+        return;
+      }
+      if (isNextChange || isPrevChange) {
+        e.preventDefault();
+        navigateChange(isPrevChange ? 'prev' : 'next');
+        return;
+      }
+      if (!isUndo && !isRedo) return;
+      e.preventDefault();
+      if (isUndo) undoHistory();
+      if (isRedo) redoHistory();
+    });
+
+    const savedSession = loadSessionState();
+    if (savedSession) {
+      if (savedSession.current) {
+        historyStack = Array.isArray(savedSession.historyStack) ? savedSession.historyStack : [];
+        historyIndex = Number.isInteger(savedSession.historyIndex) ? savedSession.historyIndex : historyStack.length - 1;
+        restoreHistoryState(savedSession.current);
+        if (!historyStack.length) {
+          historyStack = [cloneState()];
+          historyIndex = 0;
+        }
+      } else {
+        restoreHistoryState(savedSession);
+        historyStack = [cloneState()];
+        historyIndex = 0;
+      }
+    } else {
+      renderAll();
+      pushHistory();
+    }
+
+    shortcutTipText.textContent = navigator.platform.toUpperCase().includes('MAC')
+      ? 'Cmd+Z, Shift+Cmd+Z, Cmd+Opt+Down/Up'
+      : 'Ctrl+Z, Shift+Ctrl+Z, Ctrl+Alt+Down/Up';
+  </script>
+</body>
+</html>
