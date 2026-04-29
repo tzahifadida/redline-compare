@@ -88,6 +88,11 @@
       font-size: 15px;
     }
 
+    .source-label {
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
     .panel-subtitle {
       color: var(--muted);
       font-size: 12px;
@@ -906,6 +911,21 @@
       textarea {
         min-height: 96px;
       }
+      .review-toolbar,
+      .review-toolbar-group {
+        flex-wrap: wrap;
+        width: 100%;
+      }
+      .review-toolbar-group button {
+        flex: 1 1 calc(50% - 3px);
+        min-width: 0;
+      }
+      #copyApproved {
+        flex-basis: 100%;
+      }
+      .shortcut-tip {
+        display: none;
+      }
       .review-dock-top {
         flex-direction: column;
       }
@@ -930,9 +950,9 @@
             </div>
           </div>
           <div class="panel-body">
-            <div class="panel-title" style="font-size: 13px;">Original</div>
+            <div class="panel-title source-label">Original</div>
             <textarea id="oldText" placeholder="Paste the original text here..."></textarea>
-            <div class="panel-title" style="font-size: 13px; margin-top: 14px;">Revised</div>
+            <div class="panel-title source-label" style="margin-top: 14px;">Revised</div>
             <textarea id="newText" placeholder="Paste the revised text here..."></textarea>
             <div class="toolbar">
               <button id="compareBtn" class="primary compact">Compare</button>
