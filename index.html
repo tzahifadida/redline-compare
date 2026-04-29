@@ -832,9 +832,11 @@
         overflow: auto;
       }
       .app {
+        padding: 12px;
         height: auto;
         min-height: 100vh;
         grid-template-columns: 1fr;
+        gap: 12px;
       }
       .sidebar {
         min-height: unset;
@@ -842,11 +844,68 @@
       .sidebar-scroll {
         overflow: visible;
       }
-      .output-wrap { min-height: unset; }
-      textarea { min-height: 180px; }
+      .main-panel {
+        min-height: min(760px, calc(100vh - 24px));
+      }
+      .output-wrap {
+        height: auto;
+        min-height: 0;
+        flex: 1;
+      }
+      .preview-shell {
+        grid-template-rows: auto auto minmax(420px, 1fr) auto;
+      }
+      .document {
+        min-height: 420px;
+      }
+      textarea { min-height: 120px; }
     }
 
     @media (max-width: 720px) {
+      .app {
+        padding: 8px;
+      }
+      .panel-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        padding: 12px;
+      }
+      .panel-body {
+        padding: 12px;
+      }
+      .editor-shell.diff-shell {
+        --gutter-width: 112px;
+      }
+      .editor-shell.diff-shell .document-overlay,
+      .editor-shell.diff-shell .document-textarea {
+        padding-right: calc(var(--gutter-width) + 14px);
+      }
+      .document-overlay,
+      .document-textarea {
+        padding: 18px 14px;
+      }
+      .document {
+        min-height: 56vh;
+        font-size: 16px;
+        line-height: 2;
+      }
+      .document-gutter {
+        padding: 18px 8px 18px 0;
+      }
+      .deletion-badge,
+      .replacement-badge {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        padding: 5px 6px;
+        font-size: 12px;
+      }
+      .cue-revert {
+        width: 100%;
+        padding: 5px 6px;
+      }
+      textarea {
+        min-height: 96px;
+      }
       .review-dock-top {
         flex-direction: column;
       }
