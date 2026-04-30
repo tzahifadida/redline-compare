@@ -31,6 +31,39 @@
     }
 
     * { box-sizing: border-box; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .skip-link {
+      position: fixed;
+      left: 16px;
+      top: 12px;
+      z-index: 100;
+      transform: translateY(-160%);
+      padding: 9px 12px;
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      background: var(--panel-3);
+      color: var(--accent-strong);
+      font: 700 13px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
+      text-decoration: none;
+      box-shadow: var(--shadow);
+    }
+
+    .skip-link:focus-visible {
+      transform: translateY(0);
+    }
+
     body {
       margin: 0;
       font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
@@ -89,6 +122,7 @@
     }
 
     .source-label {
+      display: block;
       font-size: 13px;
       margin-bottom: 6px;
     }
@@ -169,6 +203,16 @@
     textarea:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(121, 168, 255, 0.16);
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 3px solid rgba(200, 220, 255, 0.92);
+      outline-offset: 3px;
+      box-shadow: 0 0 0 5px rgba(121, 168, 255, 0.18);
     }
 
     .toolbar {
@@ -963,23 +1007,44 @@
         margin-left: 0;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+
+      button:hover {
+        transform: none;
+      }
+
+      .deletion-badge.active,
+      .replacement-badge.active {
+        transform: none;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#documentPreview">Skip to editor</a>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" aria-labelledby="sourcePanelTitle">
       <div class="sidebar-scroll">
         <section class="panel compact">
           <div class="panel-header">
             <div>
-              <div class="panel-title">Source texts</div>
+              <div class="panel-title" id="sourcePanelTitle">Source texts</div>
               <div class="panel-subtitle">Compact inputs, preview-first workflow</div>
             </div>
           </div>
           <div class="panel-body">
-            <div class="panel-title source-label">Original</div>
+            <label class="panel-title source-label" for="oldText">Original</label>
             <textarea id="oldText" placeholder="Paste the original text here..."></textarea>
-            <div class="panel-title source-label" style="margin-top: 14px;">Revised</div>
+            <label class="panel-title source-label" for="newText" style="margin-top: 14px;">Revised</label>
             <textarea id="newText" placeholder="Paste the revised text here..."></textarea>
             <div class="toolbar">
               <button id="compareBtn" class="primary compact">Compare</button>
@@ -997,10 +1062,10 @@
       </div>
     </aside>
 
-    <section class="panel main-panel">
+    <main class="panel main-panel" aria-labelledby="editorPanelTitle">
       <div class="panel-header">
         <div>
-          <div class="panel-title">Document Editor</div>
+          <div class="panel-title" id="editorPanelTitle">Document Editor</div>
           <div class="panel-subtitle">Edit the document directly, with diff highlights when needed</div>
         </div>
         <div class="header-links">
@@ -1016,10 +1081,10 @@
       <div class="panel-body output-wrap">
         <div class="preview-shell">
           <div class="preview-topbar">
-            <div class="summary-bar" id="summaryBar"></div>
+            <div class="summary-bar" id="summaryBar" aria-label="Change summary"></div>
             <div class="view-switch" aria-label="Preview mode">
-              <button id="diffViewBtn" class="compact toggle-on" type="button">Diff view</button>
-              <button id="finalViewBtn" class="ghost compact" type="button">Final view</button>
+              <button id="diffViewBtn" class="compact toggle-on" type="button" aria-pressed="true">Diff view</button>
+              <button id="finalViewBtn" class="ghost compact" type="button" aria-pressed="false">Final view</button>
             </div>
           </div>
           <div class="legend">
@@ -1027,8 +1092,8 @@
             <span><i class="swatch" style="background: var(--delete-bg);"></i> deletion</span>
             <span class="muted" id="legendHint">Diff view shows highlights, but you can still edit anywhere in the document.</span>
           </div>
-          <div class="document" id="documentPreview"></div>
-          <div class="review-dock" id="reviewDock"></div>
+          <div class="document" id="documentPreview" tabindex="-1" aria-label="Document editor"></div>
+          <div class="review-dock" id="reviewDock" aria-label="Change navigation"></div>
           <div class="review-toolbar">
             <div class="review-toolbar-group">
               <button id="undoBtn" class="ghost compact" type="button">Undo</button>
@@ -1038,7 +1103,7 @@
           </div>
         </div>
       </div>
-    </section>
+    </main>
   </div>
 
   <div class="shortcut-tip" id="shortcutTip">
@@ -1046,6 +1111,7 @@
     <span id="shortcutTipText">Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z</span>
   </div>
   <div id="markerTooltip" class="marker-tooltip" aria-hidden="true"></div>
+  <div id="statusAnnouncer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
   <script>
     const oldTextEl = document.getElementById('oldText');
@@ -1062,6 +1128,7 @@
     const redoBtn = document.getElementById('redoBtn');
     const shortcutTipText = document.getElementById('shortcutTipText');
     const markerTooltip = document.getElementById('markerTooltip');
+    const statusAnnouncer = document.getElementById('statusAnnouncer');
 
     let currentChanges = [];
     let currentTokens = [];
@@ -1072,6 +1139,18 @@
     let suppressHistory = false;
     let finalTextDraft = null;
     const SESSION_KEY = 'redline-text-compare-session';
+
+    function announceStatus(message) {
+      if (!statusAnnouncer) return;
+      statusAnnouncer.textContent = '';
+      requestAnimationFrame(() => {
+        statusAnnouncer.textContent = message;
+      });
+    }
+
+    function preferredScrollBehavior(requestedBehavior = 'smooth') {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : requestedBehavior;
+    }
 
     function escapeHtml(str) {
       return str
@@ -1264,12 +1343,14 @@
       if (historyIndex <= 0) return;
       historyIndex -= 1;
       restoreHistoryState(historyStack[historyIndex]);
+      announceStatus('Undo applied.');
     }
 
     function redoHistory() {
       if (historyIndex >= historyStack.length - 1) return;
       historyIndex += 1;
       restoreHistoryState(historyStack[historyIndex]);
+      announceStatus('Redo applied.');
     }
 
     function buildFinalTextFromChanges() {
@@ -1328,6 +1409,7 @@
       newTextEl.value = finalTextDraft;
       renderAll();
       pushHistory();
+      announceStatus(`${describeChange(change)} reverted to the original text.`);
     }
 
     function rebuildDiffFromDocumentText() {
@@ -1518,6 +1600,7 @@
       const overlay = document.getElementById('documentOverlay');
       const gutter = document.getElementById('documentGutter');
       if (!textarea || !overlay) return;
+      const behavior = preferredScrollBehavior(scrollBehavior);
 
       const activeOverlayEl = overlay.querySelector(`[data-change-chip="${activeChangeId}"]`);
       const activeGutterEl = documentPreview.querySelector(`.document-gutter [data-change-chip="${activeChangeId}"]`);
@@ -1528,12 +1611,12 @@
         const targetHeight = Math.max(activeOverlayEl.offsetHeight || 0, 28);
         const nextScrollTop = Math.max(0, targetTop - (textarea.clientHeight / 2) + (targetHeight / 2));
 
-        textarea.scrollTo({ top: nextScrollTop, behavior: scrollBehavior });
+        textarea.scrollTo({ top: nextScrollTop, behavior });
         overlay.scrollTop = nextScrollTop;
       }
 
       if (gutter && activeGutterEl) {
-        activeGutterEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: scrollBehavior });
+        activeGutterEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
       }
     }
 
@@ -1547,6 +1630,28 @@
       activeChangeId = nextChange.id;
       renderAll();
       focusActiveChange();
+      announceStatus(`${describeChange(nextChange)} change ${nextIndex + 1} of ${currentChanges.length}. ${getChangeStatus(nextChange)}.`);
+    }
+
+    function selectChange(changeId, shouldAnnounce = true) {
+      const change = currentChanges.find(c => c.id === changeId);
+      if (!change) return;
+      activeChangeId = changeId;
+      renderReviewDock();
+      renderSummary();
+      documentPreview.querySelectorAll('[data-change-chip]').forEach(c => {
+        c.classList.remove('active');
+        if (c.hasAttribute('aria-current')) c.setAttribute('aria-current', 'false');
+      });
+      documentPreview.querySelectorAll(`[data-change-chip="${changeId}"]`).forEach(c => {
+        c.classList.add('active');
+        if (c.hasAttribute('aria-current')) c.setAttribute('aria-current', 'true');
+      });
+      hideMarkerTooltip();
+      if (shouldAnnounce) {
+        const index = currentChanges.findIndex(c => c.id === changeId);
+        announceStatus(`${describeChange(change)} change ${index + 1} of ${currentChanges.length} selected.`);
+      }
     }
 
     function renderPreview() {
@@ -1555,7 +1660,7 @@
         if (!finalText) {
           documentPreview.innerHTML = '<div class="empty">Paste two texts and click <b>Compare</b> to generate the approved text view.</div>';
         } else {
-          documentPreview.innerHTML = `<div class="editor-shell"><textarea id="documentEditor" class="document-textarea final-mode" spellcheck="true">${escapeHtml(finalText)}</textarea></div>`;
+          documentPreview.innerHTML = `<div class="editor-shell"><textarea id="documentEditor" class="document-textarea final-mode" spellcheck="true" aria-label="Final document text">${escapeHtml(finalText)}</textarea></div>`;
         }
         attachDocumentEditor();
         return;
@@ -1589,9 +1694,9 @@
             plainText += change.oldText;
           } else if (change.decision === 'pending' && showDeleted) {
             cueIndex += 1;
-            overlayHtml += `<span class="deletion-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}"></span>`;
+            overlayHtml += `<span class="deletion-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}" aria-hidden="true"></span>`;
             gutterItems.push(
-              `<div class="deletion-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content"><strong style="margin-right:6px;">${cueIndex}.</strong><span class="del-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}">Revert</button></div>`
+              `<div class="deletion-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content" data-change-chip="${change.id}" role="button" tabindex="0" aria-current="${change.id === activeChangeId ? 'true' : 'false'}" aria-label="Deleted text cue ${cueIndex}. Select this change."><strong style="margin-right:6px;">${cueIndex}.</strong><span class="del-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}" aria-label="Revert deleted text cue ${cueIndex} to original">Revert</button></div>`
             );
           }
           continue;
@@ -1599,9 +1704,9 @@
 
         if (change.type === 'replace' && change.decision === 'pending') {
           cueIndex += 1;
-          overlayHtml += `<span class="replacement-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}"></span>`;
+          overlayHtml += `<span class="replacement-anchor${active}${decisionClass}" data-change-chip="${change.id}" data-marker="${cueIndex}" data-tooltip="${escapeHtml(change.oldText)}" aria-hidden="true"></span>`;
           gutterItems.push(
-            `<div class="replacement-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content"><strong style="margin-right:6px;">${cueIndex}.</strong><span class="rep-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}">Revert</button></div>`
+            `<div class="replacement-badge${active}${decisionClass}" data-change-chip="${change.id}"><div class="cue-content" data-change-chip="${change.id}" role="button" tabindex="0" aria-current="${change.id === activeChangeId ? 'true' : 'false'}" aria-label="Replaced text cue ${cueIndex}. Select this change."><strong style="margin-right:6px;">${cueIndex}.</strong><span class="rep-wording">${escapeHtml(change.oldText)}</span></div><button class="ghost compact cue-revert" type="button" data-revert-change="${change.id}" aria-label="Revert replacement cue ${cueIndex} to original">Revert</button></div>`
           );
         }
 
@@ -1639,7 +1744,7 @@
         documentPreview.innerHTML = `
           <div id="diffShell" class="editor-shell diff-shell">
             <div id="documentOverlay" class="document-overlay"></div>
-            <textarea id="documentEditor" class="document-textarea diff-mode" spellcheck="true"></textarea>
+            <textarea id="documentEditor" class="document-textarea diff-mode" spellcheck="true" aria-label="Editable document text with diff highlights"></textarea>
             <div id="documentGutter" class="document-gutter"><div id="gutterList" class="gutter-list"></div></div>
           </div>`;
         shell = document.getElementById('diffShell');
@@ -1673,32 +1778,26 @@
       overlay.scrollTop = textarea.scrollTop;
 
       // Chip click handlers
-      documentPreview.querySelectorAll('[data-change-chip]').forEach(el => {
+      overlay.querySelectorAll('[data-change-chip]').forEach(el => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           const id = Number(el.getAttribute('data-change-chip'));
-          activeChangeId = id;
-          renderReviewDock();
-          renderSummary();
-          documentPreview.querySelectorAll('[data-change-chip]').forEach(c => {
-            c.classList.remove('active');
-          });
-          documentPreview.querySelectorAll(`[data-change-chip="${id}"]`).forEach(c => c.classList.add('active'));
-          hideMarkerTooltip();
+          selectChange(id);
         });
       });
 
-      documentPreview.querySelectorAll('.deletion-badge, .replacement-badge').forEach(el => {
+      documentPreview.querySelectorAll('.cue-content').forEach(el => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           const id = Number(el.getAttribute('data-change-chip'));
-          activeChangeId = id;
-          renderReviewDock();
-          renderSummary();
-          documentPreview.querySelectorAll('[data-change-chip]').forEach(c => {
-            c.classList.remove('active');
-          });
-          documentPreview.querySelectorAll(`[data-change-chip="${id}"]`).forEach(c => c.classList.add('active'));
+          selectChange(id);
+        });
+        el.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          e.stopPropagation();
+          const id = Number(el.getAttribute('data-change-chip'));
+          selectChange(id);
         });
         el.title = 'Click to select this change';
       });
@@ -1787,6 +1886,8 @@
     function renderAll() {
       diffViewBtn.className = previewMode === 'diff' ? 'compact toggle-on' : 'ghost compact';
       finalViewBtn.className = previewMode === 'final' ? 'compact toggle-on' : 'ghost compact';
+      diffViewBtn.setAttribute('aria-pressed', previewMode === 'diff' ? 'true' : 'false');
+      finalViewBtn.setAttribute('aria-pressed', previewMode === 'final' ? 'true' : 'false');
       undoBtn.disabled = historyIndex <= 0;
       redoBtn.disabled = historyIndex >= historyStack.length - 1 || historyIndex === -1;
       legendHint.textContent = previewMode === 'diff'
@@ -1797,7 +1898,7 @@
       renderSummary();
     }
 
-    function compare() {
+    function compare(shouldAnnounce = true) {
       const oldText = oldTextEl.value;
       const newText = newTextEl.value;
       const { tokens, changes } = buildChanges(oldText, newText);
@@ -1807,6 +1908,7 @@
       finalTextDraft = newText;
       renderAll();
       pushHistory();
+      if (shouldAnnounce) announceStatus(`${changes.length} changes found.`);
     }
 
     function debounce(fn, ms) {
@@ -1818,12 +1920,15 @@
     }
 
     const debouncedCompare = debounce(() => {
-      if (autoCompareEl.checked) compare();
+      if (autoCompareEl.checked) compare(false);
     }, 250);
 
     oldTextEl.addEventListener('input', debouncedCompare);
     newTextEl.addEventListener('input', debouncedCompare);
-    showDeletedEl.addEventListener('change', renderAll);
+    showDeletedEl.addEventListener('change', () => {
+      renderAll();
+      announceStatus(showDeletedEl.checked ? 'Deletion cues shown.' : 'Deletion cues hidden.');
+    });
 
     document.getElementById('compareBtn').addEventListener('click', compare);
     async function copyApprovedText() {
@@ -1831,8 +1936,10 @@
         const editor = document.getElementById('documentEditor');
         const currentEditorText = editor ? editor.value : getFinalText();
         await navigator.clipboard.writeText(currentEditorText);
+        announceStatus('Editor text copied to clipboard.');
       } catch (e) {
         console.error(e);
+        announceStatus('Could not copy editor text.');
       }
     }
 
@@ -1845,12 +1952,14 @@
       rebuildDiffFromDocumentText();
       renderAll();
       pushHistory();
+      announceStatus('Diff view selected.');
     });
     finalViewBtn.addEventListener('click', () => {
       previewMode = 'final';
       finalTextDraft = getFinalText();
       renderAll();
       pushHistory();
+      announceStatus('Final view selected.');
     });
     document.getElementById('clearAll').addEventListener('click', () => {
       oldTextEl.value = '';
@@ -1861,6 +1970,7 @@
       finalTextDraft = null;
       renderAll();
       pushHistory();
+      announceStatus('All text cleared.');
     });
     document.getElementById('loadDemo').addEventListener('click', () => {
       oldTextEl.value = `Project Aurora is a neighborhood pilot program designed to help residents report small infrastructure issues and request city follow-up. The first version of the program was launched in 2022 with a simple web form, a weekly email digest, and a volunteer review team that manually routed every request.
@@ -1877,7 +1987,8 @@ In the revised process, residents can submit reports about broken lights, damage
 The pilot produced encouraging feedback, but it also exposed several operational problems. Response times were inconsistent, duplicate reports were common, and urgent safety issues were sometimes mixed together with routine maintenance requests. Some residents said the updates were too vague, while others said they never knew whether a report had been received, reviewed, or closed.
 
 For the next phase, the city plans to keep the reporting workflow while making substantial updates to the public guide. The guide now states that submissions usually receive an initial response within three business days and that safety-related requests may be escalated ahead of routine issues. It also explains that photos are strongly recommended, anonymous reports are accepted in limited cases, and repeat reports may be merged when they describe the same problem. A short FAQ was added at the end to explain status labels, duplicate handling, and when residents should call emergency services instead of filing a standard report.`;
-      compare();
+      compare(false);
+      announceStatus('Demo text loaded and compared.');
     });
 
     document.addEventListener('keydown', (e) => {
@@ -1892,7 +2003,13 @@ For the next phase, the city plans to keep the reporting workflow while making s
         const hasSelection = editor && typeof editor.selectionStart === 'number' && typeof editor.selectionEnd === 'number' && editor.selectionStart !== editor.selectionEnd;
         if (isFocusedEditor && !hasSelection) {
           e.preventDefault();
-          navigator.clipboard.writeText(editor.value).catch((err) => console.error(err));
+          navigator.clipboard
+            .writeText(editor.value)
+            .then(() => announceStatus('Editor text copied to clipboard.'))
+            .catch((err) => {
+              console.error(err);
+              announceStatus('Could not copy editor text.');
+            });
         }
         return;
       }
