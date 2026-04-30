@@ -47,7 +47,15 @@ This tool makes those edits visible. It helps you decide whether to keep a sugge
 
 ## Privacy
 
-The tool runs in your browser. It is a single-page HTML file and does not require an account.
+The tool runs entirely in your browser. There is no backend server, no login, and no upload step. The text you paste is processed locally in the page, which helps keep your writing private.
+
+The page may still be served by GitHub Pages, but the comparison itself happens in your browser after the page loads.
+
+## License
+
+This project is released under the Apache 2.0 License. You can read the license here:
+
+https://github.com/tzahifadida/redline-compare/blob/main/LICENSE
 
 ## Support
 
