@@ -222,6 +222,43 @@
       margin-top: 10px;
     }
 
+    .chat-import-help {
+      margin-top: 10px;
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.025);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .chat-import-help summary {
+      cursor: pointer;
+      padding: 9px 10px;
+      color: var(--accent-strong);
+      font-weight: 700;
+      list-style-position: inside;
+    }
+
+    .chat-import-help-body {
+      padding: 0 10px 10px;
+    }
+
+    .chat-import-help p {
+      margin: 0 0 8px;
+    }
+
+    .prompt-example {
+      margin: 8px 0;
+      padding: 10px;
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      background: rgba(9, 13, 28, 0.72);
+      color: var(--text);
+      font: 11px/1.45 "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
     button {
       border: 1px solid var(--border);
       background: #1b2752;
@@ -256,17 +293,6 @@
       cursor: not-allowed;
       transform: none;
     }
-
-    .options {
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .options label { display: flex; align-items: center; gap: 8px; }
 
     .output-wrap {
       display: flex;
@@ -882,13 +908,6 @@
       line-height: 1.35;
     }
 
-    .panel-note {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-      margin-top: 10px;
-    }
-
     @media (max-width: 1180px) {
       body {
         overflow: auto;
@@ -948,6 +967,12 @@
       }
       .panel-body {
         padding: 12px;
+      }
+      .chat-import-help {
+        margin-top: 8px;
+      }
+      .chat-import-help:not([open]) .chat-import-help-body {
+        display: none;
       }
       .editor-shell.diff-shell {
         --gutter-width: 112px;
@@ -1048,15 +1073,29 @@
             <textarea id="newText" placeholder="Paste the revised text here..."></textarea>
             <div class="toolbar">
               <button id="compareBtn" class="primary compact">Compare</button>
+              <button id="importClipboard" class="ghost compact" type="button">Import from clipboard</button>
+              <button id="copyChatPrompt" class="ghost compact" type="button">Copy Import Prompt</button>
               <button id="copyResult" class="ghost compact">Copy result</button>
               <button id="loadDemo" class="ghost compact demo-button">Load Demo</button>
               <button id="clearAll" class="ghost compact">Clear</button>
             </div>
-            <div class="options">
-              <label><input type="checkbox" id="autoCompare" checked /> auto compare</label>
-              <label><input type="checkbox" id="showDeleted" checked /> show deletions</label>
-            </div>
-            <div class="panel-note">The inputs stay small so the review surface can own the screen.</div>
+            <details class="chat-import-help">
+              <summary>Import edits from ChatGPT, Gemini, Claude, etc.</summary>
+              <div class="chat-import-help-body">
+                <p>Ask for this copyable block, copy the answer, then use <b>Import from clipboard</b>.</p>
+                <p>Your browser may ask for clipboard permission. In Chrome, the prompt may say something like “See text and images copied to the clipboard”.</p>
+                <pre id="chatPromptExample" class="prompt-example">Please present the original text and the revised text in one copyable code block with no language tag, exactly in this format:
+
+--- ORIGINAL ---
+[the original text]
+
+--- REVISED ---
+[the revised text]
+
+Do not add anything inside the code block except those two sections.</pre>
+                <button class="ghost compact" type="button" data-copy-import-prompt>Copy Import Prompt</button>
+              </div>
+            </details>
           </div>
         </section>
       </div>
@@ -1118,8 +1157,6 @@
     const newTextEl = document.getElementById('newText');
     const documentPreview = document.getElementById('documentPreview');
     const summaryBar = document.getElementById('summaryBar');
-    const autoCompareEl = document.getElementById('autoCompare');
-    const showDeletedEl = document.getElementById('showDeleted');
     const reviewDock = document.getElementById('reviewDock');
     const legendHint = document.getElementById('legendHint');
     const diffViewBtn = document.getElementById('diffViewBtn');
@@ -1138,6 +1175,8 @@
     let historyIndex = -1;
     let suppressHistory = false;
     let finalTextDraft = null;
+    const AUTO_COMPARE = true;
+    const SHOW_DELETIONS = true;
     const SESSION_KEY = 'redline-text-compare-session';
 
     function announceStatus(message) {
@@ -1670,7 +1709,7 @@
       // KEY RULE: overlay and textarea must contain identical text content so lines
       // stay aligned. Deletion bubbles are NOT in the overlay — they are rendered in
       // a separate absolutely-positioned badge layer that doesn't affect text flow.
-      const showDeleted = showDeletedEl.checked;
+      const showDeleted = SHOW_DELETIONS;
       let overlayHtml = '';
       let plainText = '';
       const gutterItems = [];
@@ -1911,6 +1950,56 @@
       if (shouldAnnounce) announceStatus(`${changes.length} changes found.`);
     }
 
+    function trimOuterBlankLines(text) {
+      return text.replace(/^\s+|\s+$/g, '');
+    }
+
+    function parseImportBlock(text) {
+      const originalMarker = '--- ORIGINAL ---';
+      const revisedMarker = '--- REVISED ---';
+      const originalIndex = text.indexOf(originalMarker);
+      const revisedIndex = text.indexOf(revisedMarker);
+
+      if (originalIndex === -1 || revisedIndex === -1 || revisedIndex <= originalIndex) {
+        throw new Error('Clipboard block must include --- ORIGINAL --- and --- REVISED ---.');
+      }
+
+      const oldText = trimOuterBlankLines(text.slice(originalIndex + originalMarker.length, revisedIndex));
+      const newText = trimOuterBlankLines(text.slice(revisedIndex + revisedMarker.length));
+
+      if (!oldText || !newText) {
+        throw new Error('Original and revised sections cannot be empty.');
+      }
+
+      return { oldText, newText };
+    }
+
+    async function importFromClipboard() {
+      try {
+        const clipboardText = await navigator.clipboard.readText();
+        const imported = parseImportBlock(clipboardText);
+        oldTextEl.value = imported.oldText;
+        newTextEl.value = imported.newText;
+        compare(false);
+        announceStatus('Clipboard block imported and compared.');
+      } catch (e) {
+        console.error(e);
+        announceStatus(e.message || 'Could not read clipboard. Paste the block manually or allow clipboard access.');
+      }
+    }
+
+    async function copyChatPrompt() {
+      const promptEl = document.getElementById('chatPromptExample');
+      if (!promptEl) return;
+      try {
+        await navigator.clipboard.writeText(promptEl.textContent.trim());
+        announceStatus('Chat prompt copied to clipboard.');
+      } catch (e) {
+        console.error(e);
+        announceStatus('Could not copy the chat prompt.');
+      }
+    }
+
     function debounce(fn, ms) {
       let t;
       return (...args) => {
@@ -1920,17 +2009,18 @@
     }
 
     const debouncedCompare = debounce(() => {
-      if (autoCompareEl.checked) compare(false);
+      if (AUTO_COMPARE) compare(false);
     }, 250);
 
     oldTextEl.addEventListener('input', debouncedCompare);
     newTextEl.addEventListener('input', debouncedCompare);
-    showDeletedEl.addEventListener('change', () => {
-      renderAll();
-      announceStatus(showDeletedEl.checked ? 'Deletion cues shown.' : 'Deletion cues hidden.');
-    });
 
     document.getElementById('compareBtn').addEventListener('click', compare);
+    document.getElementById('importClipboard').addEventListener('click', importFromClipboard);
+    document.getElementById('copyChatPrompt').addEventListener('click', copyChatPrompt);
+    document.querySelectorAll('[data-copy-import-prompt]').forEach(btn => {
+      btn.addEventListener('click', copyChatPrompt);
+    });
     async function copyApprovedText() {
       try {
         const editor = document.getElementById('documentEditor');

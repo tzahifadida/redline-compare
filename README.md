@@ -31,6 +31,33 @@ The tool highlights additions, deletions, and replacements so you can focus only
 5. Edit the text directly if you want to make small corrections.
 6. Copy the final text when you are done.
 
+## Using With ChatGPT or Other Chat Engines
+
+You can ask ChatGPT, Claude, or another chat engine to return both versions in one copyable block. Then copy that block and click `Import from clipboard`.
+
+Use this prompt:
+
+````
+Please present the original text and the revised text in one copyable code block with no language tag, exactly in this format:
+
+```
+--- ORIGINAL ---
+[the original text]
+
+--- REVISED ---
+[the revised text]
+```
+
+Do not add anything inside the code block except those two sections.
+````
+
+Then:
+
+1. Click the copy button on the chat engine's code block.
+2. Open Redline Compare.
+3. Click `Import from clipboard`.
+4. Review the highlighted changes.
+
 ## Keyboard Shortcuts
 
 - Undo: `Cmd+Z` on Mac, `Ctrl+Z` on Windows/Linux
