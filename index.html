@@ -119,6 +119,8 @@
     .panel-title {
       font-weight: 700;
       font-size: 15px;
+      line-height: 1.2;
+      margin: 0;
     }
 
     .source-label {
@@ -1062,7 +1064,7 @@
         <section class="panel compact">
           <div class="panel-header">
             <div>
-              <div class="panel-title" id="sourcePanelTitle">Source texts</div>
+              <h2 class="panel-title" id="sourcePanelTitle">Source texts</h2>
               <div class="panel-subtitle">Compact inputs, preview-first workflow</div>
             </div>
           </div>
@@ -1104,7 +1106,7 @@ Do not add anything inside the code block except those two sections.</pre>
     <main class="panel main-panel" aria-labelledby="editorPanelTitle">
       <div class="panel-header">
         <div>
-          <div class="panel-title" id="editorPanelTitle">Document Editor</div>
+          <h1 class="panel-title" id="editorPanelTitle">Document Editor</h1>
           <div class="panel-subtitle">Edit the document directly, with diff highlights when needed</div>
         </div>
         <div class="header-links">
@@ -1142,12 +1144,11 @@ Do not add anything inside the code block except those two sections.</pre>
           </div>
         </div>
       </div>
+      <div class="shortcut-tip" id="shortcutTip">
+        <strong>Undo / Redo</strong><br />
+        <span id="shortcutTipText">Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z</span>
+      </div>
     </main>
-  </div>
-
-  <div class="shortcut-tip" id="shortcutTip">
-    <strong>Undo / Redo</strong><br />
-    <span id="shortcutTipText">Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z</span>
   </div>
   <div id="markerTooltip" class="marker-tooltip" aria-hidden="true"></div>
   <div id="statusAnnouncer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
