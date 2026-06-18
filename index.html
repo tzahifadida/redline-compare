@@ -356,7 +356,8 @@
       font: inherit;
       line-height: inherit;
       white-space: pre-wrap;
-      word-break: break-word;
+      overflow-wrap: anywhere;
+      word-break: normal;
       tab-size: 4;
       border: 0;
       outline: none;
@@ -379,10 +380,20 @@
       padding-right: calc(var(--gutter-width) + 28px);
     }
 
-    /* Make inline chip text invisible too — only the background/border matters */
-    .document-overlay .ins,
-    .document-overlay .change-chip {
-      color: transparent;
+    /* Make every overlay text node invisible — only highlights/markers matter. */
+    .document-overlay,
+    .document-overlay * {
+      color: transparent !important;
+      text-shadow: none !important;
+    }
+
+    /* Textareas expose one extra line of scroll room near the bottom. Match it
+       so the visual overlay does not clamp early and drift out of phase. */
+    .document-overlay::after {
+      content: "";
+      display: block;
+      height: 2.2em;
+      height: 1lh;
     }
 
     /* Textarea: sits behind overlay, receives all input */
@@ -513,7 +524,7 @@
       padding: 0 0.18em;
       border-radius: 999px;
       background: rgba(86, 22, 28, 0.96);
-      color: var(--delete-text);
+      color: var(--delete-text) !important;
       font: 700 11px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
       pointer-events: auto;
@@ -547,7 +558,7 @@
       padding: 0 0.18em;
       border-radius: 999px;
       background: rgba(92, 53, 7, 0.96);
-      color: var(--replace-text);
+      color: var(--replace-text) !important;
       font: 700 11px/1 "IBM Plex Sans", "Segoe UI", sans-serif;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
       pointer-events: auto;
@@ -1470,98 +1481,6 @@ Do not add anything inside the code block except those two sections.</pre>
       });
     }
 
-    function getPlainTextFromContentEditable(el) {
-      // Walk DOM extracting plain text. Skip deletion-badge spans (UI labels only).
-      // deletion-anchor chips themselves contribute no text (the deleted word is gone).
-      let text = '';
-      function walk(node) {
-        if (node.nodeType === Node.TEXT_NODE) {
-          text += node.textContent;
-          return;
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
-        // Skip all chip spans — they are UI only, not real document text
-        if (node.dataset.chip) return;
-        for (const child of node.childNodes) walk(child);
-        const tag = node.tagName.toLowerCase();
-        if (tag === 'div' || tag === 'p') text += '\n';
-        if (tag === 'br') text += '\n';
-      }
-      walk(el);
-      return text.replace(/\n$/, '');
-    }
-
-    function getCaretCharOffset(el) {
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return null;
-      const range = sel.getRangeAt(0);
-      if (!el.contains(range.startContainer)) return null;
-
-      // Walk the live DOM, counting real text chars until we hit the caret node+offset
-      let count = 0;
-      let found = false;
-      const targetNode = range.startContainer;
-      const targetOffset = range.startOffset;
-
-      function walk(node) {
-        if (found) return;
-        if (node === targetNode && node.nodeType === Node.TEXT_NODE) {
-          count += targetOffset;
-          found = true;
-          return;
-        }
-        if (node.nodeType === Node.TEXT_NODE) {
-          count += node.textContent.length;
-          return;
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
-        // Skip all chip spans — they contribute no real text
-        if (node.dataset.chip) return;
-        for (const child of node.childNodes) {
-          if (found) return;
-          walk(child);
-        }
-      }
-      walk(el);
-      return found ? count : null;
-    }
-
-    function setCaretCharOffset(el, targetOffset) {
-      const sel = window.getSelection();
-      if (!sel) return;
-      let remaining = targetOffset;
-      let found = false;
-      function walk(node) {
-        if (found) return;
-        if (node.nodeType === Node.TEXT_NODE) {
-          if (remaining <= node.textContent.length) {
-            const range = document.createRange();
-            range.setStart(node, remaining);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            found = true;
-          } else {
-            remaining -= node.textContent.length;
-          }
-          return;
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return;
-        // Skip all chip spans
-        if (node.dataset.chip) return;
-        for (const child of node.childNodes) walk(child);
-      }
-      walk(el);
-      // If offset is past the end, place caret at end
-      if (!found) {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    }
-
     function attachDocumentEditor() {
       const editor = document.getElementById('documentEditor');
       if (!editor) return;
@@ -1571,19 +1490,20 @@ Do not add anything inside the code block except those two sections.</pre>
       // Both diff-mode and final-mode editors are plain textareas now.
       // The diff overlay is updated separately and never touches the textarea.
       let rafPending = false;
-      const debouncedOverlayRender = debounce(() => {
-        // Re-render overlay and summary after typing pause (doesn't touch textarea)
+      function refreshDiffLayers() {
+        if (previewMode !== 'diff') return;
         const overlay = document.getElementById('documentOverlay');
-        if (!overlay) return; // final mode has no overlay
+        if (!overlay) return;
         const sel0 = editor.selectionStart;
         const sel1 = editor.selectionEnd;
         const st = editor.scrollTop;
+        const sl = editor.scrollLeft;
         renderPreview();
-        renderSummary();
-        // Restore selection after renderPreview may have reset textarea.value
+        // Restore selection after renderPreview may have reset textarea.value.
         try { editor.setSelectionRange(sel0, sel1); } catch(e) {}
         editor.scrollTop = st;
-      }, 500);
+        editor.scrollLeft = sl;
+      }
 
       editor.addEventListener('input', () => {
         finalTextDraft = editor.value.replace(/\r/g, '');
@@ -1598,9 +1518,9 @@ Do not add anything inside the code block except those two sections.</pre>
           rafPending = true;
           requestAnimationFrame(() => {
             rafPending = false;
+            refreshDiffLayers();
             renderSummary();
             renderReviewDock();
-            debouncedOverlayRender();
           });
         }
       });
@@ -1985,7 +1905,11 @@ Do not add anything inside the code block except those two sections.</pre>
         announceStatus('Clipboard block imported and compared.');
       } catch (e) {
         console.error(e);
-        announceStatus(e.message || 'Could not read clipboard. Paste the block manually or allow clipboard access.');
+        const parseMessage = e.message && (
+          e.message.startsWith('Clipboard block must include') ||
+          e.message.startsWith('Original and revised sections')
+        );
+        announceStatus(parseMessage ? e.message : 'Could not read clipboard. Paste the block manually or allow clipboard access.');
       }
     }
 
@@ -2016,7 +1940,7 @@ Do not add anything inside the code block except those two sections.</pre>
     oldTextEl.addEventListener('input', debouncedCompare);
     newTextEl.addEventListener('input', debouncedCompare);
 
-    document.getElementById('compareBtn').addEventListener('click', compare);
+    document.getElementById('compareBtn').addEventListener('click', () => compare());
     document.getElementById('importClipboard').addEventListener('click', importFromClipboard);
     document.getElementById('copyChatPrompt').addEventListener('click', copyChatPrompt);
     document.querySelectorAll('[data-copy-import-prompt]').forEach(btn => {
